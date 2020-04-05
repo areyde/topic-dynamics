@@ -156,11 +156,11 @@ def slice_and_parse(repositories_file: str, output_dir: str,
     # Create a folder for created files
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    dates_indices = {}
     count = 0
     # Create temporal slices of the project, get a list of files for each slice,
     # parse all files, save the tokens
-    with open(os.path.abspath(os.path.join(output_dir, "tokens.txt")), "w+") as fout:
+    with open(os.path.abspath(os.path.join(output_dir, "tokens.txt")), "w+") as fout1, \
+            open(os.path.abspath(os.path.join(output_dir, "slices.txt")), "w+") as fout2:
         for date in tqdm(dates):
             start_index = count + 1
             for repository in repositories_list:
@@ -180,28 +180,23 @@ def slice_and_parse(repositories_file: str, output_dir: str,
                                             count += 1
                                             formatted_identifiers = transform_identifiers(
                                                 identifiers)
-                                            fout.write("{file_index};{file_path};{tokens}\n"
-                                                       .format(file_index=str(count),
-                                                               file_path=repository[0] +
-                                                                         os.path.relpath(
-                                                                             os.path.abspath(
-                                                                                 os.path.join(
-                                                                                     td, file)),
-                                                                             td),
-                                                               tokens=",".join(
-                                                                   formatted_identifiers)))
+                                            fout1.write("{file_index};{file_path};{tokens}\n"
+                                                        .format(file_index=str(count),
+                                                                file_path=repository[0] +
+                                                                          os.path.relpath(
+                                                                              os.path.abspath(
+                                                                                  os.path.join(
+                                                                                      td, file)),
+                                                                              td),
+                                                                tokens=",".join(
+                                                                    formatted_identifiers)))
                                     except UnicodeDecodeError:
                                         continue
             end_index = count
-            dates_indices[date.strftime("%Y-%m-%d")] = (start_index, end_index)
-    # Write the index boundaries of slices into a separate log file
-    print("Writing the index boundaries of slices into an auxiliary file.")
-    with open(os.path.abspath(os.path.join(output_dir, "slices.txt")), "w+") as fout:
-        for date in dates_indices.keys():
-            if dates_indices[date][1] >= dates_indices[date][0]:  # Skips empty slices
-                fout.write("{date};{start_index};{end_index}\n"
-                           .format(date=date, start_index=str(dates_indices[date][0]),
-                                   end_index=str(dates_indices[date][1])))
+            if end_index >= start_index:  # Skips empty slices
+                fout2.write("{date};{start_index};{end_index}\n"
+                            .format(date=date.strftime("%Y-%m-%d"), start_index=str(start_index),
+                                    end_index=str(end_index)))
 
 
 def split_token_file(slices_file: str, tokens_file: str, output_dir: str) -> None:
@@ -279,11 +274,11 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
     :return: None.
     """
     print("Calculating the diffs between versions and transforming the token lists.")
-    diff_indices = {}
-    count_index_diff = 0
-    with open(os.path.abspath(os.path.join(output_dir, "diffs_tokens.txt")), "w+") as fout:
+    count = 0
+    with open(os.path.abspath(os.path.join(output_dir, "diffs_tokens.txt")), "w+") as fout1, \
+            open(os.path.abspath(os.path.join(output_dir, "diffs_slices.txt")), "w+") as fout2:
         for date in tqdm(range(2, len(dates) + 1)):
-            start_index_diff = count_index_diff + 1
+            start_index = count + 1
             # Save the tokens of the "previous" slice into memory
             previous_version = {}
             with open(os.path.abspath(
@@ -320,11 +315,11 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
                         new_tokens = differentiate_tokens(tokens, "+", new_tokens)
                     if len(new_tokens) != 0:
                         formatted_new_tokens = transform_identifiers(new_tokens)
-                        count_index_diff = count_index_diff + 1
-                        fout.write("{file_index};{file_path};{tokens}\n"
-                                   .format(file_index=str(count_index_diff),
-                                           file_path=token_line.path,
-                                           tokens=",".join(formatted_new_tokens)))
+                        count = count + 1
+                        fout1.write("{file_index};{file_path};{tokens}\n"
+                                    .format(file_index=str(count),
+                                            file_path=token_line.path,
+                                            tokens=",".join(formatted_new_tokens)))
             # Iterate over files in the "previous" version to see which have been deleted
             for old_path in previous_version.keys():
                 new_path = old_path.replace(dates[date - 2].strftime("%Y-%m-%d"),
@@ -335,21 +330,16 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
                     new_tokens = []
                     new_tokens = differentiate_tokens(tokens, "-", new_tokens)
                     formatted_new_tokens = transform_identifiers(new_tokens)
-                    count_index_diff = count_index_diff + 1
-                    fout.write("{file_index};{file_path};{tokens}\n"
-                               .format(file_index=str(count_index_diff),
-                                       file_path=old_path,
-                                       tokens=",".join(formatted_new_tokens)))
-            end_index_diff = count_index_diff
-            diff_indices[dates[date - 1].strftime("%Y-%m-%d")] = (start_index_diff, end_index_diff)
-    # Write the index boundaries of slices into a separate log file
-    print("Writing the index boundaries of slices into an auxiliary file (updated).")
-    with open(os.path.abspath(os.path.join(output_dir, "diffs_slices.txt")), "w+") as fout:
-        for date in diff_indices.keys():
-            if diff_indices[date][1] >= diff_indices[date][0]:  # Skips empty slices
-                fout.write("{date};{start_index};{end_index}\n"
-                           .format(date=date, start_index=str(diff_indices[date][0]),
-                                   end_index=str(diff_indices[date][1])))
+                    count = count + 1
+                    fout1.write("{file_index};{file_path};{tokens}\n"
+                                .format(file_index=str(count),
+                                        file_path=old_path,
+                                        tokens=",".join(formatted_new_tokens)))
+            end_index = count
+            if end_index >= start_index:  # Skips empty slices
+                fout2.write("{date};{start_index};{end_index}\n"
+                            .format(date=dates[date - 1].strftime("%Y-%m-%d"),
+                                    start_index=str(start_index), end_index=str(end_index)))
 
 
 def uci_format(tokens_file: str, output_dir: str, name: str) -> None:
