@@ -7,8 +7,11 @@ import json
 from operator import itemgetter
 import os
 from tempfile import TemporaryDirectory
-from typing import Any, List, NamedTuple, Tuple
+from typing import Any, Dict, List, NamedTuple, Tuple
 
+from pygments.lexers.jvm import KotlinLexer, ScalaLexer
+from pygments.lexers.objective import SwiftLexer
+import pygments
 from tqdm import tqdm
 import tree_sitter
 
@@ -17,18 +20,152 @@ from .parsers.utils import get_parser
 from .slicing import checkout_by_date, cmdline, get_dates, get_date_of_first_commit
 from .subtokenizing import TokenParser
 
-SUPPORTED_LANGUAGES = {"Java": "java",
-                       "Python": "python",
-                       "C++": "cpp"}
-
-NODE_TYPES = {"c": ["identifier", "type_identifier"],
-              "c-sharp": ["identifier", "type_identifier"],
-              "cpp": ["identifier", "type_identifier"],
-              "java": ["identifier", "type_identifier"],
-              "python": ["identifier", "type_identifier"]}
+Subtokenizer = TokenParser()
 
 SliceLine = NamedTuple("SliceLine", [("date", str), ("start_index", int), ("end_index", int)])
 TokenLine = NamedTuple("TokenLine", [("index", int), ("path", str), ("tokens", str)])
+
+SUPPORTED_LANGUAGES = {"JavaScript": "tree-sitter",
+                       "Python": "tree-sitter",
+                       "Java": "tree-sitter",
+                       "Go": "tree-sitter",
+                       "C++": "tree-sitter",
+                       "Ruby": "tree-sitter",
+                       "TypeScript": "tree-sitter",
+                       "TSX": "tree-sitter",
+                       "PHP": "tree-sitter",
+                       "C#": "tree-sitter",
+                       "C": "tree-sitter",
+                       "Scala": "pygments",
+                       "Shell": "tree-sitter",
+                       "Rust": "tree-sitter",
+                       "Swift": "pygments",
+                       "Kotlin": "pygments"}
+
+
+class TreeSitterParser:
+    PARSERS = {"JavaScript": "javascript",
+               "Python": "python",
+               "Java": "java",
+               "Go": "go",
+               "C++": "cpp",
+               "Ruby": "ruby",
+               "TypeScript": "typescript",
+               "TSX": "tsx",
+               "PHP": "php",
+               "C#": "c_sharp",
+               "C": "c",
+               "Shell": "bash",
+               "Rust": "rust"}
+
+    NODE_TYPES = {"JavaScript": {"identifier", "property_identifier",
+                                 "shorthand_property_identifier"},
+                  "Python": {"identifier"},
+                  "Java": {"identifier", "type_identifier"},
+                  "Go": {"identifier", "field_identifier", "type_identifier"},
+                  "C++": {"identifier", "namespace_identifier", "field_identifier",
+                          "type_identifier"},
+                  "Ruby": {"identifier", "constant", "symbol"},
+                  "TypeScript": {"identifier", "property_identifier",
+                                 "shorthand_property_identifier", "type_identifier"},
+                  "TSX": {"identifier", "property_identifier",
+                          "shorthand_property_identifier", "type_identifier"},
+                  "PHP": {"name"},
+                  "C#": {"identifier"},
+                  "C": {"identifier", "field_identifier", "type_identifier"},
+                  "Shell": {"variable_name", "command_name"},
+                  "Rust": {"identifier", "field_identifier", "type_identifier"}}
+
+    @staticmethod
+    def read_file_bytes(file: str) -> bytes:
+        """
+        Read the contents of the file.
+        :param file: the path to the file.
+        :return: bytes with the contents of the file.
+        """
+        with open(file) as fin:
+            return bytes(fin.read(), "utf-8")
+
+    @staticmethod
+    def get_positional_bytes(node: tree_sitter.Node) -> Tuple[int, int]:
+        """
+        Extract start and end byte of the tree-sitter Node.
+        :param node: node on the AST.
+        :return: (start byte, end byte).
+        """
+        start = node.start_byte
+        end = node.end_byte
+        return start, end
+
+    @staticmethod
+    def get_tokens(file: str, lang: str) -> List[Tuple[str, int]]:
+        """
+        Gather a sorted list of identifiers in the file and their count.
+        :param file: the path to the file.
+        :param lang: the language of file.
+        :return: a list of tuples, identifier and count.
+        """
+        content = TreeSitterParser.read_file_bytes(file)
+        tree = get_parser(TreeSitterParser.PARSERS[lang]).parse(content)
+        root = tree.root_node
+        tokens = []
+
+        def traverse_tree(node: tree_sitter.Node) -> None:
+            """
+            Run down the AST (DFS) from a given node and gather tokens from its children.
+            :param node: starting node.
+            :return: None.
+            """
+            for child in node.children:
+                if child.type in TreeSitterParser.NODE_TYPES[lang]:
+                    start, end = TreeSitterParser.get_positional_bytes(child)
+                    token = content[start:end].decode("utf-8")
+                    if "\n" not in token:  # Will break output files.
+                        subtokens = list(Subtokenizer.process_token(token))
+                        tokens.extend(subtokens)
+                if len(child.children) != 0:
+                    try:
+                        traverse_tree(child)
+                    except RecursionError:
+                        continue
+
+        traverse_tree(root)
+        return sorted(Counter(tokens).items(), key=itemgetter(1), reverse=True)
+
+
+class PygmentsParser:
+    LEXERS = {"Scala": ScalaLexer(),
+              "Swift": SwiftLexer(),
+              "Kotlin": KotlinLexer()}
+
+    TYPES = {"Scala": {pygments.token.Name, pygments.token.Keyword.Type},
+             "Swift": {pygments.token.Name},
+             "Kotlin": {pygments.token.Name}}
+
+    @staticmethod
+    def read_file(file: str) -> str:
+        """
+        Read the contents of the file.
+        :param file: the path to the file.
+        :return: the contents of the file.
+        """
+        with open(file) as fin:
+            return fin.read()
+
+    @staticmethod
+    def get_tokens(file: str, lang: str) -> List[Tuple[str, int]]:
+        """
+        Gather a sorted list of identifiers in the file and their count.
+        :param file: the path to the file.
+        :param lang: the language of file.
+        :return: a list of tuples, identifier and count.
+        """
+        content = PygmentsParser.read_file(file)
+        tokens = []
+        for pair in pygments.lex(content, PygmentsParser.LEXERS[lang]):
+            if any(pair[0] in sublist for sublist in PygmentsParser.TYPES[lang]):
+                tokens.extend(list(Subtokenizer.process_token(pair[1])))
+        return sorted(Counter(tokens).items(), key=itemgetter(1), reverse=True)
 
 
 def parse_slice_line(slice_line: str) -> SliceLine:
@@ -62,77 +199,46 @@ def recognize_languages(directory: str) -> dict:
                               .format(enry_loc=get_enry(), directory=directory)))
 
 
-def read_file(file: str) -> bytes:
-    """
-    Read the contents of the file.
-    :param file: the path to the file.
-    :return: bytes with the contents of the file.
-    """
-    with open(file) as fin:
-        return bytes(fin.read(), "utf-8")
-
-
-def get_positional_bytes(node: tree_sitter.Node) -> Tuple[int, int]:
-    """
-    Extract start and end byte.
-    :param node: node on the AST.
-    :return: (start byte, end byte).
-    """
-    start = node.start_byte
-    end = node.end_byte
-    return start, end
-
-
-def get_identifiers(file: str, lang: str) -> List[Tuple[str, int]]:
+def get_tokens(file: str, lang: str) -> List[Tuple[str, int]]:
     """
     Gather a sorted list of identifiers in the file and their count.
     :param file: the path to the file.
     :param lang: the language of file.
     :return: a list of tuples, identifier and count.
     """
-    content = read_file(file)
-    tree = get_parser(lang).parse(content)
-    root = tree.root_node
-    identifiers = []
-
-    def traverse_tree(node: tree_sitter.Node) -> None:
-        """
-        Run down the AST (DFS) from a given node and gather identifiers from its children.
-        :param node: starting node.
-        :return: None.
-        """
-        for child in node.children:
-            if child.type in NODE_TYPES[lang]:
-                start, end = get_positional_bytes(child)
-                identifier = content[start:end].decode("utf-8")
-                if "\n" not in identifier:  # Will break output files. TODO: try to recreate bug.
-                    subtokens = list(TokenParser().process_token(identifier))
-                    identifiers.extend(subtokens)
-            if len(child.children) != 0:
-                try:
-                    traverse_tree(child)
-                except RecursionError:
-                    continue
-
-    traverse_tree(root)
-    sorted_identifiers = sorted(Counter(identifiers).items(), key=itemgetter(1), reverse=True)
-
-    return sorted_identifiers
+    if SUPPORTED_LANGUAGES[lang] == "tree-sitter":
+        return TreeSitterParser.get_tokens(file, lang)
+    else:
+        return PygmentsParser.get_tokens(file, lang)
 
 
-def transform_identifiers(identifiers: List[Tuple[str, int]]) -> List[str]:
+def transform_files_list(lang2files: Dict[str, str], directory: str) -> List[Tuple[str, str]]:
     """
-    Transform the original list of identifiers into the writable form.
-    :param identifiers: list of tuples, identifier and count.
-    :return: a list of identifiers in the writable form, "identifier:count".
+    Transform the output of Enry on a directory into a list of tuples (full_path_to_file, lang).
+    :param lang2files: the dictionary output of Enry: {language: [files], ...}.
+    :param directory: the full path to the directory that was processed with Enry.
+    :return: a list of tuples (full_path_to_file, lang) for the supported languages.
     """
-    formatted_identifiers = []
-    for identifier in identifiers:
-        if identifier[0].rstrip() != "":  # Checking for occurring empty tokens.
-            formatted_identifiers.append("{identifier}:{count}"
-                                         .format(identifier=identifier[0].rstrip(),
-                                                 count=str(identifier[1]).rstrip()))
-    return formatted_identifiers
+    files = []
+    for lang in lang2files.keys():
+        if lang in SUPPORTED_LANGUAGES.keys():
+            for file in lang2files[lang]:
+                files.append((os.path.abspath(os.path.join(directory, file)), lang))
+    return files
+
+
+def transform_tokens(tokens: List[Tuple[str, int]]) -> List[str]:
+    """
+    Transform the original list of tokens into the writable form.
+    :param tokens: list of tuples, token and count.
+    :return: a list of tokens in the writable form, "token:count".
+    """
+    formatted_tokens = []
+    for token in tokens:
+        if token[0].rstrip() != "":  # Checking for occurring empty tokens.
+            formatted_tokens.append("{token}:{count}".format(token=token[0].rstrip(),
+                                                             count=str(token[1]).rstrip()))
+    return formatted_tokens
 
 
 def slice_and_parse(repositories_file: str, output_dir: str,
@@ -169,29 +275,21 @@ def slice_and_parse(repositories_file: str, output_dir: str,
                         subdirectory = os.path.abspath(os.path.join(td, date.strftime("%Y-%m-%d")))
                         checkout_by_date(repository[0], subdirectory, date)
                         lang2files = recognize_languages(td)
-                        for lang in lang2files.keys():
-                            if lang in SUPPORTED_LANGUAGES.keys():
-                                for file in lang2files[lang]:
-                                    try:
-                                        identifiers = get_identifiers(
-                                            os.path.abspath(os.path.join(td, file)),
-                                            SUPPORTED_LANGUAGES[lang])
-                                        if len(identifiers) != 0:
-                                            count += 1
-                                            formatted_identifiers = transform_identifiers(
-                                                identifiers)
-                                            fout1.write("{file_index};{file_path};{tokens}\n"
-                                                        .format(file_index=str(count),
-                                                                file_path=repository[0] +
-                                                                          os.path.relpath(
-                                                                              os.path.abspath(
-                                                                                  os.path.join(
-                                                                                      td, file)),
-                                                                              td),
-                                                                tokens=",".join(
-                                                                    formatted_identifiers)))
-                                    except UnicodeDecodeError:
-                                        continue
+                        files = transform_files_list(lang2files, td)
+                        for file in files:
+                            try:
+                                tokens = get_tokens(file[0], file[1])
+                                if len(tokens) != 0:
+                                    count += 1
+                                    formatted_tokens = transform_tokens(tokens)
+                                    fout1.write("{file_index};{file_path};{tokens}\n"
+                                                .format(file_index=str(count),
+                                                        file_path=repository[0] + os.path.relpath(
+                                                            os.path.abspath(os.path.join(
+                                                                td, file[0])), td),
+                                                        tokens=",".join(formatted_tokens)))
+                            except UnicodeDecodeError:
+                                continue
             end_index = count
             if end_index >= start_index:  # Skips empty slices
                 fout2.write("{date};{start_index};{end_index}\n"
@@ -314,7 +412,7 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
                         new_tokens = []
                         new_tokens = differentiate_tokens(tokens, "+", new_tokens)
                     if len(new_tokens) != 0:
-                        formatted_new_tokens = transform_identifiers(new_tokens)
+                        formatted_new_tokens = transform_tokens(new_tokens)
                         count = count + 1
                         fout1.write("{file_index};{file_path};{tokens}\n"
                                     .format(file_index=str(count),
@@ -329,7 +427,7 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
                                     reverse=True)
                     new_tokens = []
                     new_tokens = differentiate_tokens(tokens, "-", new_tokens)
-                    formatted_new_tokens = transform_identifiers(new_tokens)
+                    formatted_new_tokens = transform_tokens(new_tokens)
                     count = count + 1
                     fout1.write("{file_index};{file_path};{tokens}\n"
                                 .format(file_index=str(count),
