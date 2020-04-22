@@ -302,10 +302,11 @@ def slice_and_parse(repositories_file: str, output_dir: str,
             open(os.path.abspath(os.path.join(output_dir, "tokens.txt")), "w+") as fout1, \
             open(os.path.abspath(os.path.join(output_dir, "slices.txt")), "w+") as fout2, \
             open(os.path.abspath(os.path.join(output_dir, "commits.txt")), "w+") as fout3:
-        for date in tqdm(dates):
+        for count_slice, date in enumerate(dates):
+            print(f"Tokenizing slice {count_slice + 1} out of {len(dates)}.")
             start_index = count + 1
             fout3.write(date.strftime("%Y-%m-%d") + "\n\n")
-            for repository in repositories_list:
+            for repository in tqdm(repositories_list):
                 if date > repository[1]:
                     with TemporaryDirectory() as td:
                         subdirectory = os.path.abspath(os.path.join(td, date.strftime("%Y-%m-%d")))
