@@ -300,14 +300,18 @@ def slice_and_parse(repositories_file: str, output_dir: str,
     # parse all files, save the tokens
     with Parallel(PROCESSES) as pool, \
             open(os.path.abspath(os.path.join(output_dir, "tokens.txt")), "w+") as fout1, \
-            open(os.path.abspath(os.path.join(output_dir, "slices.txt")), "w+") as fout2:
+            open(os.path.abspath(os.path.join(output_dir, "slices.txt")), "w+") as fout2, \
+            open(os.path.abspath(os.path.join(output_dir, "commits.txt")), "w+") as fout3:
         for date in tqdm(dates):
             start_index = count + 1
+            fout3.write(date.strftime("%Y-%m-%d") + "\n\n")
             for repository in repositories_list:
                 if date > repository[1]:
                     with TemporaryDirectory() as td:
                         subdirectory = os.path.abspath(os.path.join(td, date.strftime("%Y-%m-%d")))
-                        checkout_by_date(repository[0], subdirectory, date)
+                        commit = checkout_by_date(repository[0], subdirectory, date)
+                        fout3.write("{repository};{commit}\n".format(repository=repository[0],
+                                                                     commit=commit))
                         lang2files = recognize_languages(td)
                         files = transform_files_list(lang2files, td)
                         chunk_results = pool([delayed(get_tokens_from_list)(chunk)
@@ -328,6 +332,7 @@ def slice_and_parse(repositories_file: str, output_dir: str,
                 fout2.write("{date};{start_index};{end_index}\n"
                             .format(date=date.strftime("%Y-%m-%d"), start_index=str(start_index),
                                     end_index=str(end_index)))
+            fout3.write("\n")
 
 
 def split_token_file(slices_file: str, tokens_file: str, output_dir: str) -> None:
