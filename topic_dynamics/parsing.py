@@ -423,12 +423,12 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
                 for line in fin:
                     token_line = parse_token_line(line)
                     previous_version[token_line.path] = read_tokens_counter(token_line.tokens)
-            current_version = []
+            current_version = set()
             with open(os.path.abspath(os.path.join(slices_tokens_dir, str(date) + ".txt"))) as fin:
                 for line in fin:
                     # Iterate over files in the "current" version
                     token_line = parse_token_line(line)
-                    current_version.append(token_line.path)
+                    current_version.add(token_line.path)
                     tokens = read_tokens_counter(token_line.tokens)
                     old_path = token_line.path.replace(dates[date - 1].strftime("%Y-%m-%d"),
                                                        dates[date - 2].strftime("%Y-%m-%d"), 1)
