@@ -333,7 +333,6 @@ def slice_and_parse(repositories_file: str, output_dir: str,
                 fout2.write("{date};{start_index};{end_index}\n"
                             .format(date=date.strftime("%Y-%m-%d"), start_index=str(start_index),
                                     end_index=str(end_index)))
-            fout3.write("\n")
 
 
 def split_token_file(slices_file: str, tokens_file: str, output_dir: str) -> None:
