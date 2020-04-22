@@ -50,7 +50,7 @@ def get_date_of_first_commit(repository: str) -> datetime.datetime:
     :return: a datetime object of the first commit.
     """
     output = cmdline('cd {repository}; git log --reverse | sed -n -e "3,3p"'
-                     .format(repository=repository)).split()
+                     .format(repository=repository)).rstrip().split()
     date_string = output[2] + '-' + output[3] + '-' + output[5]
     return datetime.datetime.strptime(date_string, "%b-%d-%Y")
 
@@ -64,9 +64,9 @@ def checkout_by_date(repository: str, directory: str, before_date: datetime.date
     :return: the hash of the checked out commit.
     """
     branch = cmdline("cd {repository}; git rev-parse --abbrev-ref HEAD"
-                     .format(repository=repository))
+                     .format(repository=repository)).rstrip()
     os.system("cp -r {repository} {directory}".format(repository=repository, directory=directory))
     os.system('cd {directory}; git checkout --quiet '
               '`git rev-list -n 1 --before="{date} 00:00:00 0000" {branch}` > /dev/null'
               .format(directory=directory, date=before_date.strftime("%Y-%m-%d"), branch=branch))
-    return cmdline("cd {directory}; git rev-parse HEAD".format(directory=directory))
+    return cmdline("cd {directory}; git rev-parse HEAD".format(directory=directory)).rstrip()
