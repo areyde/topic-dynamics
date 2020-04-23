@@ -285,13 +285,14 @@ def slice_and_parse(repositories_file: str, output_dir: str,
     :param dates: a list of dates used for slicing.
     :return: None.
     """
-    print("Creating the temporal slices of the data.")
+    print("Collecting the data about the repositories.")
     assert os.path.exists(repositories_file)
     repositories_list = []
     with open(repositories_file) as fin:
-        for line in fin:
+        for line in tqdm(fin):
             repositories_list.append([line.rstrip(), get_date_of_first_commit(line.rstrip())])
             assert os.path.exists(os.path.abspath(os.path.join(repositories_list[-1][0], ".git")))
+    print("Creating the temporal slices of the data.")
     # Create a folder for created files
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

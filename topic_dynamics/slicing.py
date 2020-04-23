@@ -49,10 +49,16 @@ def get_date_of_first_commit(repository: str) -> datetime.datetime:
     :param repository: path to git repository.
     :return: a datetime object of the first commit.
     """
-    output = cmdline('cd {repository}; git log --reverse | sed -n -e "3,3p"'
-                     .format(repository=repository)).rstrip().split()
-    date_string = output[2] + '-' + output[3] + '-' + output[5]
-    return datetime.datetime.strptime(date_string, "%b-%d-%Y")
+    try:
+        output = cmdline('cd {repository}; git log --reverse | sed -n -e "3,3p"'
+                         .format(repository=repository)).rstrip().split()
+        return datetime.datetime.strptime(output[2] + '-' + output[3] + '-' + output[5],
+                                          "%b-%d-%Y")
+    except:
+        output = cmdline('cd {repository}; git log --reverse | sed -n -e "4,4p"'
+                         .format(repository=repository)).rstrip().split()
+        return datetime.datetime.strptime(output[2] + '-' + output[3] + '-' + output[5],
+                                          "%b-%d-%Y")
 
 
 def checkout_by_date(repository: str, directory: str, before_date: datetime.datetime) -> str:
