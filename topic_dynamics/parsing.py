@@ -128,12 +128,11 @@ class TreeSitterParser:
                         subtokens = list(Subtokenizer.process_token(token))
                         tokens.extend(subtokens)
                 if len(child.children) != 0:
-                    try:
-                        traverse_tree(child)
-                    except RecursionError:
-                        continue
-
-        traverse_tree(root)
+                    traverse_tree(child)
+        try:
+            traverse_tree(root)
+        except RecursionError:
+            return []
         return sorted(Counter(tokens).items(), key=itemgetter(1), reverse=True)
 
 
