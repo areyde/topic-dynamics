@@ -129,6 +129,7 @@ class TreeSitterParser:
                         tokens.extend(subtokens)
                 if len(child.children) != 0:
                     traverse_tree(child)
+
         try:
             traverse_tree(root)
         except RecursionError:
@@ -304,7 +305,8 @@ def slice_and_parse(repositories_file: str, output_dir: str,
     with Parallel(PROCESSES) as pool, \
             open(os.path.abspath(os.path.join(output_dir, "tokens.txt")), "w+") as fout1, \
             open(os.path.abspath(os.path.join(output_dir, "slices.txt")), "w+") as fout2, \
-            open(os.path.abspath(os.path.join(output_dir, "commits.txt")), "w+") as fout3:
+            open(os.path.abspath(os.path.join(output_dir, "commits.txt")), "w+") as fout3, \
+            open(os.path.abspath(os.path.join(output_dir, "empty_files.txt")), "w+") as fout4:
         for count_slice, date in enumerate(dates):
             print(f"Tokenizing slice {count_slice + 1} out of {len(dates)}.")
             start_index = count + 1
@@ -331,6 +333,11 @@ def slice_and_parse(repositories_file: str, output_dir: str,
                                                             os.path.abspath(os.path.join(
                                                                 td, file)), td),
                                                         tokens=",".join(formatted_tokens)))
+                                else:
+                                    fout4.write("{file_path}\n"
+                                                .format(file_path=repository[0] + os.path.relpath(
+                                                            os.path.abspath(os.path.join(
+                                                                td, file)), td)))
             end_index = count
             if end_index >= start_index:  # Skips empty slices
                 fout2.write("{date};{start_index};{end_index}\n"
