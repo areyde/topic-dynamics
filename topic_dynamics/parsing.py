@@ -255,7 +255,7 @@ def get_tokens_from_list(files_list: List[Tuple[str, str]]) -> Dict[str, List[Tu
     for file in files_list:
         try:
             file2tokens[file[0]] = get_tokens(file[0], file[1])
-        except UnicodeDecodeError:
+        except (UnicodeDecodeError, FileNotFoundError):
             continue
     return file2tokens
 
