@@ -328,7 +328,8 @@ def slice_and_parse(repositories_file: str, output_dir: str,
                                               for chunk in create_chunks(files)])
                         for chunk_result in chunk_results:
                             for file in chunk_result.keys():
-                                if len(chunk_result[file]) != 0:
+                                if (len(chunk_result[file]) != 0) and ("\n" not in file) \
+                                        and (";" not in file):
                                     count += 1
                                     formatted_tokens = transform_tokens(chunk_result[file])
                                     fout1.write("{file_index};{file_path};{tokens}\n"
