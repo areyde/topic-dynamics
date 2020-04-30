@@ -4,7 +4,7 @@ Analysis-related functionality.
 import csv
 from operator import itemgetter
 import os
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 import artm
 import matplotlib.pyplot as plt
@@ -84,22 +84,31 @@ def save_parameters(model: artm.artm_model.ARTM, output_dir: str) -> None:
     plt.close()
 
 
-@check_output_directory(output_dir="output_dir")
-def save_most_popular_tokens(model: artm.artm_model.ARTM, output_dir: str) -> None:
+def get_most_popular_tokens(model: artm.artm_model.ARTM) -> Dict[str, List[str]]:
     """
-    Save the most popular tokens of the model.
-    When run several times, overwrites the data.
+    Extracts the most popular tokens of the model for all topics.
     :param model: the model.
+    :return: a dictionary from topic names to their most popular tokens.
+    """
+    name2tokens = {}
+    for topic_name in model.topic_names:
+        name2tokens[topic_name] = model.score_tracker["TopTokensScore"].last_tokens[topic_name]
+    return name2tokens
+
+
+@check_output_directory(output_dir="output_dir")
+def save_most_popular_tokens(name2tokens: Dict[str, List[str]], output_dir: str) -> None:
+    """
+    Save the most popular tokens of the model for all topics.
+    When run several times, overwrites the data.
+    :param name2tokens: a dictionary from topic names to their most popular tokens.
     :param output_dir: the output directory.
     :return: None.
     """
-    with open(os.path.abspath(os.path.join(output_dir, "most_popular_tokens.txt")),
-              "w+") as fout:
-        for topic_name in model.topic_names:
-            fout.write("{topic_name}: {tokens}\n"
-                       .format(topic_name=topic_name,
-                               tokens=str(model.score_tracker["TopTokensScore"]
-                                          .last_tokens[topic_name])))
+    with open(os.path.abspath(os.path.join(output_dir, "most_popular_tokens.txt")), "w+") as fout:
+        for topic_name in name2tokens.keys():
+            fout.write("{topic_name}: {tokens}\n".format(topic_name=topic_name,
+                                                         tokens=str(name2tokens[topic_name])))
 
 
 @check_output_directory(output_dir="output_dir")
@@ -236,7 +245,8 @@ def save_metric_change(metric: np.array, output_dir: str, output_file: str) -> N
 
 @check_output_directory("output_dir")
 def save_topics_change(assignment: np.array, assignment_normalized: np.array,
-                       scattering: np.array, focus: np.array, output_dir: str) -> None:
+                       scattering: np.array, focus: np.array, name2tokens: Dict[str, List[str]],
+                       output_dir: str) -> None:
     """
     Create a combined plot of various metrics for every topic and save them to the given directory.
     :param assignment: numpy array with assignment values in different slices for a given topic.
@@ -244,12 +254,16 @@ def save_topics_change(assignment: np.array, assignment_normalized: np.array,
            for a given topic.
     :param scattering: numpy array with scattering values in different slices for a given topic.
     :param focus: numpy array with focus values in different slices for a given topic.
+    :param name2tokens: a dictionary from topic names to their most popular tokens.
     :param output_dir: the path to the output directory.
     :return None.
     """
     for topic_number in range(assignment.shape[0]):
         fig, axs = plt.subplots(4, figsize=([5, 10]))
-        axs[0].set_title("Topic {topic_number}".format(topic_number=topic_number + 1))
+        axs[0].set_title("Topic {topic_number}\n{tokens}"
+                         .format(topic_number=topic_number + 1,
+                                 tokens=", ".join(name2tokens["topic_" +
+                                                              str(topic_number + 1)][:5])))
         axs[0].plot(range(1, assignment.shape[1] + 1), assignment[topic_number], "tab:red")
         axs[0].set_ylabel("Assignment (a. u.)")
         axs[0].grid(b=True)
@@ -273,12 +287,14 @@ def save_topics_change(assignment: np.array, assignment_normalized: np.array,
         plt.close()
 
 
-def save_dynamics(slices_file: str, theta_file: str, output_dir: str) -> None:
+def save_dynamics(slices_file: str, theta_file: str, name2tokens: Dict[str, List[str]],
+                  output_dir: str) -> None:
     """
     Save figures with the dynamics.
     When run several times, overwrites the data.
     :param slices_file: the path to the file with the indices of the slices.
     :param theta_file: the path to the csv file with the theta matrix.
+    :param name2tokens: a dictionary from topic names to their most popular tokens.
     :param output_dir: the output directory.
     :return: None.
     """
@@ -302,7 +318,8 @@ def save_dynamics(slices_file: str, theta_file: str, output_dir: str) -> None:
                        output_file="scattering_change.txt")
     save_metric_change(metric=focus, output_dir=output_dir, output_file="focus_change.txt")
     save_topics_change(assignment=assignment, assignment_normalized=assignment_normalized,
-                       scattering=scattering, focus=focus, output_dir=output_dir)
+                       scattering=scattering, focus=focus, name2tokens=name2tokens,
+                       output_dir=output_dir)
 
 
 def save_metadata(model: artm.artm_model.ARTM, output_dir: str, n_files: int,
@@ -324,10 +341,12 @@ def save_metadata(model: artm.artm_model.ARTM, output_dir: str, n_files: int,
     theta_file = os.path.abspath(os.path.join(output_dir, "theta.csv"))
     theta_matrix = model.get_theta().sort_index(axis=1)
     dynamics_dir = os.path.abspath(os.path.join(output_dir, "dynamics"))
+    name2tokens = get_most_popular_tokens(model)
 
     save_parameters(model=model, output_dir=output_dir)
-    save_most_popular_tokens(model=model, output_dir=output_dir)
+    save_most_popular_tokens(name2tokens=name2tokens, output_dir=output_dir)
     save_matrices(model=model, output_dir=output_dir)
     save_most_topical_files(theta_matrix=theta_matrix, tokens_file=tokens_file,
                             n_files=n_files, output_dir=output_dir)
-    save_dynamics(slices_file=slices_file, theta_file=theta_file, output_dir=dynamics_dir)
+    save_dynamics(slices_file=slices_file, theta_file=theta_file,
+                  name2tokens=name2tokens, output_dir=dynamics_dir)
