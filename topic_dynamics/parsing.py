@@ -436,7 +436,7 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
                     os.path.join(slices_tokens_dir, str(date - 1) + ".txt"))) as fin:
                 for line in fin:
                     token_line = parse_token_line(line)
-                    previous_version[token_line.path] = read_tokens_counter(token_line.tokens)
+                    previous_version[token_line.path] = token_line.tokens
             current_version = set()
             with open(os.path.abspath(os.path.join(slices_tokens_dir, str(date) + ".txt"))) as fin:
                 for line in fin:
@@ -448,7 +448,7 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
                                                        dates[date - 2].strftime("%Y-%m-%d"), 1)
                     # Check if the file with this name existed in the previous version
                     if old_path in previous_version.keys():
-                        old_tokens = previous_version[old_path]
+                        old_tokens = read_tokens_counter(previous_version[old_path])
                         # Calculate which tokens have been added and removed between versions
                         created_tokens = sorted((tokens - old_tokens).items(), key=itemgetter(1),
                                                 reverse=True)
@@ -476,8 +476,8 @@ def calculate_diffs(slices_tokens_dir: str, output_dir: str,
                 new_path = old_path.replace(dates[date - 2].strftime("%Y-%m-%d"),
                                             dates[date - 1].strftime("%Y-%m-%d"), 1)
                 if new_path not in current_version:
-                    tokens = sorted(previous_version[old_path].items(), key=itemgetter(1),
-                                    reverse=True)
+                    tokens = sorted(read_tokens_counter(previous_version[old_path]).items(),
+                                    key=itemgetter(1), reverse=True)
                     new_tokens = []
                     new_tokens = differentiate_tokens(tokens, "-", new_tokens)
                     formatted_new_tokens = transform_tokens(new_tokens)
