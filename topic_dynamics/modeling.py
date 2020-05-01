@@ -73,7 +73,7 @@ def train_model(model: artm.artm_model.ARTM, n_doc_iter: int, n_col_iter: int,
 
 def model_topics(output_dir: str, n_topics: int, sparse_theta: float, sparse_phi: float,
                  decorrelator_phi: float, n_doc_iter: int, n_col_iter: int, n_files: int,
-                 diffs: bool) -> None:
+                 diffs: bool, batch_size: int = 0) -> None:
     """
     Take the input, create the batches, train the model with the given parameters,
     and saves all metadata.
@@ -85,6 +85,8 @@ def model_topics(output_dir: str, n_topics: int, sparse_theta: float, sparse_phi
     :param n_doc_iter: number of document passes.
     :param n_col_iter: number of collection passes.
     :param n_files: number of the most topical files to be saved for each topic.
+    :param batch_size: the number of topics that will be saved together for matrices.
+                       0 means that the all topics are saved together.
     :param diffs: True if the topics are modeled on diffs,
                   False if they are modeled on full files.
     :return: None.
@@ -97,9 +99,11 @@ def model_topics(output_dir: str, n_topics: int, sparse_theta: float, sparse_phi
         name = "dataset"
         tokens_file = os.path.abspath(os.path.join(output_dir, "tokens.txt"))
         slices_file = os.path.abspath(os.path.join(output_dir, "slices.txt"))
+    if batch_size is 0:
+        batch_size = n_topics
     batch_vectorizer, dictionary = create_batches(output_dir, name)
     model = define_model(n_topics, dictionary, sparse_theta, sparse_phi, decorrelator_phi)
     train_model(model, n_doc_iter, n_col_iter, dictionary, batch_vectorizer)
     results_dir = os.path.abspath(os.path.join(output_dir, "results"))
-    save_metadata(model, results_dir, n_files, tokens_file, slices_file)
+    save_metadata(model, results_dir, n_files, batch_size, tokens_file, slices_file)
     print("Topic modeling finished.")

@@ -2,7 +2,6 @@
 Analysis-related functionality.
 """
 import csv
-import linecache
 from operator import itemgetter
 import os
 import shutil
@@ -13,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import entropy
+from tqdm import tqdm
 
 from .parsing import parse_slice_line, parse_token_line
 
@@ -114,11 +114,12 @@ def save_most_popular_tokens(name2tokens: Dict[str, List[str]], output_dir: str)
 
 
 @check_output_directory(output_dir="output_dir")
-def save_matrices(model: artm.artm_model.ARTM, output_dir: str) -> None:
+def save_matrices(model: artm.artm_model.ARTM, batch_size: int, output_dir: str) -> None:
     """
     Save the Phi and Theta matrices.
     When run several times, overwrites the data.
     :param model: the model.
+    :param batch_size: the number of topics that will be saved together for matrices.
     :param output_dir: the output directory.
     :return: Two matrices as DataFrames.
     """
@@ -126,23 +127,31 @@ def save_matrices(model: artm.artm_model.ARTM, output_dir: str) -> None:
         os.makedirs(os.path.abspath(os.path.join(output_dir, "phi")))
     if not os.path.exists(os.path.abspath(os.path.join(output_dir, "theta"))):
         os.makedirs(os.path.abspath(os.path.join(output_dir, "theta")))
-    topic_names = model.topic_names
-    for topic_name in topic_names:
-        phi_matrix = model.get_phi(topic_names=topic_name).sort_index(axis=0)
+    topic_names = [model.topic_names[i:i + batch_size]
+                   for i in range(0, len(model.topic_names), batch_size)]
+    print("Saving Phi matrix.")
+    for batch_count, batch in tqdm(enumerate(topic_names)):
+        phi_matrix = model.get_phi(topic_names=batch).sort_index(axis=0)
         phi_matrix.to_csv(os.path.abspath(os.path.join(output_dir, "phi",
-                                                       f"phi_{topic_name}.csv")))
-    for topic_name in model.topic_names:
-        theta_matrix = model.get_theta(topic_names=topic_name).sort_index(axis=1)
+                                                       f"phi_{batch_count + 1}.csv")))
+        del phi_matrix
+    print("Saving Theta matrix.")
+    for batch_count, batch in tqdm(enumerate(topic_names)):
+        theta_matrix = model.get_theta(topic_names=batch).sort_index(axis=1)
         theta_matrix.to_csv(os.path.abspath(os.path.join(output_dir, "theta",
-                                                         f"theta_{topic_name}.csv")))
-    shutil.copyfile(os.path.abspath(os.path.join(output_dir, "theta",
-                                                 f"theta_{topic_names[0]}.csv")),
+                                                         f"theta_{batch_count + 1}.csv")))
+        del theta_matrix
+    shutil.copyfile(os.path.abspath(os.path.join(output_dir, "theta", "theta_1.csv")),
                     os.path.abspath(os.path.join(output_dir, "theta.csv")))
-    with open(os.path.abspath(os.path.join(output_dir, "theta.csv")), "a") as fout:
-        for topic_name in topic_names[1:]:
-            line = linecache.getline(os.path.abspath(os.path.join(output_dir, "theta",
-                                                                  f"theta_{topic_name}.csv")), 2)
-            fout.write(line)
+    if len(topic_names) != 1:
+        print("Generating full Theta matrix from batches.")
+        with open(os.path.abspath(os.path.join(output_dir, "theta.csv")), "a") as fout:
+            for batch in tqdm(range(2, len(topic_names) + 1)):
+                with open(os.path.abspath(os.path.join(output_dir, "theta",
+                                                       f"theta_{batch}.csv"))) as fin:
+                    next(fin)
+                    for line in fin:
+                        fout.write(line)
 
 
 @check_output_directory(output_dir="output_dir")
@@ -342,13 +351,14 @@ def save_dynamics(slices_file: str, theta_file: str, name2tokens: Dict[str, List
 
 
 def save_metadata(model: artm.artm_model.ARTM, output_dir: str, n_files: int,
-                  tokens_file: str, slices_file: str) -> None:
+                  batch_size: int, tokens_file: str, slices_file: str) -> None:
     """
     Save the metadata: the parameters of the model, most popular tokens, the matrices,
     most topical files and various dynamics-related statistics.
     :param model: the model.
     :param output_dir: the output directory.
     :param n_files: number of the most topical files to be saved for each topic.
+    :param batch_size: the number of topics that will be saved together for matrices.
     :param tokens_file: the temporary file with tokens.
     :param slices_file: the path to the file with the indices of the slices.
     :return: None.
@@ -362,10 +372,15 @@ def save_metadata(model: artm.artm_model.ARTM, output_dir: str, n_files: int,
     dynamics_dir = os.path.abspath(os.path.join(output_dir, "dynamics"))
     name2tokens = get_most_popular_tokens(model)
 
+    print("Saving the main parameters of the model.")
     save_parameters(model=model, output_dir=output_dir)
+    print("Saving the most popular tokens.")
     save_most_popular_tokens(name2tokens=name2tokens, output_dir=output_dir)
-    save_matrices(model=model, output_dir=output_dir)
+    print("Saving the matrices.")
+    save_matrices(model=model, batch_size=batch_size, output_dir=output_dir)
+    print("Saving the most topical files.")
     save_most_topical_files(theta_matrix=theta_matrix, tokens_file=tokens_file,
                             n_files=n_files, output_dir=output_dir)
+    print("Saving the dynamics of topics.")
     save_dynamics(slices_file=slices_file, theta_file=theta_file,
                   name2tokens=name2tokens, output_dir=dynamics_dir)

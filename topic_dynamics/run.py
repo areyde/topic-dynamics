@@ -40,7 +40,8 @@ def main(args: argparse.Namespace) -> None:
                    "Number of collection passes: {collection_passes}\n"
                    "\n"
                    "--Statistics parameters--\n"
-                   "Number of topical files to save: {topical_files}"
+                   "Number of topical files to save: {topical_files}\n"
+                   "The size of matrices batches: {batch_size}"
                    .format(datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                            start_date=args.start_date, slices=args.slices, days=args.days,
                            input=args.input, output=args.output, mode=args.mode,
@@ -48,7 +49,7 @@ def main(args: argparse.Namespace) -> None:
                            sparse_phi=args.sparse_phi, decorrelator_phi=args.decorrelator_phi,
                            document_passes=args.document_passes,
                            collection_passes=args.collection_passes,
-                           topical_files=args.topical_files))
+                           topical_files=args.topical_files, batch_size=args.batch_size))
     with open(os.path.abspath(os.path.join(args.output, "log.txt"))) as fin:
         print(fin.read())
     initialize_parser()
@@ -61,7 +62,7 @@ def main(args: argparse.Namespace) -> None:
                      sparse_theta=float(args.sparse_theta), sparse_phi=float(args.sparse_phi),
                      decorrelator_phi=float(args.decorrelator_phi),
                      n_doc_iter=int(args.document_passes), n_col_iter=int(args.collection_passes),
-                     n_files=int(args.topical_files), diffs=True)
+                     n_files=int(args.topical_files), diffs=True, batch_size=int(args.batch_size))
     elif args.mode == "files":
         slice_and_parse_full_files(repository=args.input, output_dir=args.output,
                                    n_dates=int(args.slices), day_delta=int(args.days),
@@ -70,7 +71,7 @@ def main(args: argparse.Namespace) -> None:
                      sparse_theta=float(args.sparse_theta), sparse_phi=float(args.sparse_phi),
                      decorrelator_phi=float(args.decorrelator_phi),
                      n_doc_iter=int(args.document_passes), n_col_iter=int(args.collection_passes),
-                     n_files=int(args.topical_files), diffs=False)
+                     n_files=int(args.topical_files), diffs=False, batch_size=int(args.batch_size))
 
 
 if __name__ == "__main__":
@@ -101,5 +102,7 @@ if __name__ == "__main__":
                         help="Number of collection passes. Default value is 25.")
     parser.add_argument("-tf", "--topical_files", default=10,
                         help="Number of the most topical files to be saved for each topic.")
+    parser.add_argument("-b", "--batch_size", default=0,
+                        help="Number of topics that will be saved together for matrices.")
     args = parser.parse_args()
     main(args)
