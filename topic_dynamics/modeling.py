@@ -11,7 +11,7 @@ from .analyzing import save_metadata
 
 def create_batches(directory: str, name: str) -> Tuple[artm.BatchVectorizer, artm.Dictionary]:
     """
-    Create the batches and the dictionary from the dataset.
+    Create the batches and the dictionary from the dataset. Both of them are saved.
     :param directory: the directory with the dataset.
     :param name: name of the processed dataset.
     :return: BatchVectorizer and Dictionary.
@@ -21,6 +21,7 @@ def create_batches(directory: str, name: str) -> Tuple[artm.BatchVectorizer, art
         data_path=directory, data_format="bow_uci", collection_name=name,
         target_folder=os.path.abspath(os.path.join(directory, "batches")))
     dictionary = batch_vectorizer.dictionary
+    dictionary.save(os.path.abspath(os.path.join(directory, "dictionary")))
     return batch_vectorizer, dictionary
 
 
