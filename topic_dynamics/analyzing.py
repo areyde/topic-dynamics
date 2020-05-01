@@ -2,8 +2,10 @@
 Analysis-related functionality.
 """
 import csv
+import linecache
 from operator import itemgetter
 import os
+import shutil
 from typing import Any, Callable, Dict, List, Tuple
 
 import artm
@@ -120,10 +122,27 @@ def save_matrices(model: artm.artm_model.ARTM, output_dir: str) -> None:
     :param output_dir: the output directory.
     :return: Two matrices as DataFrames.
     """
-    phi_matrix = model.get_phi().sort_index(axis=0)
-    phi_matrix.to_csv(os.path.abspath(os.path.join(output_dir, "phi.csv")))
-    theta_matrix = model.get_theta().sort_index(axis=1)
-    theta_matrix.to_csv(os.path.abspath(os.path.join(output_dir, "theta.csv")))
+    if not os.path.exists(os.path.abspath(os.path.join(output_dir, "phi"))):
+        os.makedirs(os.path.abspath(os.path.join(output_dir, "phi")))
+    if not os.path.exists(os.path.abspath(os.path.join(output_dir, "theta"))):
+        os.makedirs(os.path.abspath(os.path.join(output_dir, "theta")))
+    topic_names = model.topic_names
+    for topic_name in topic_names:
+        phi_matrix = model.get_phi(topic_names=topic_name).sort_index(axis=0)
+        phi_matrix.to_csv(os.path.abspath(os.path.join(output_dir, "phi",
+                                                       f"phi_{topic_name}.csv")))
+    for topic_name in model.topic_names:
+        theta_matrix = model.get_theta(topic_names=topic_name).sort_index(axis=1)
+        theta_matrix.to_csv(os.path.abspath(os.path.join(output_dir, "theta",
+                                                         f"theta_{topic_name}.csv")))
+    shutil.copyfile(os.path.abspath(os.path.join(output_dir, "theta",
+                                                 f"theta_{topic_names[0]}.csv")),
+                    os.path.abspath(os.path.join(output_dir, "theta.csv")))
+    with open(os.path.abspath(os.path.join(output_dir, "theta.csv")), "a") as fout:
+        for topic_name in topic_names[1:]:
+            line = linecache.getline(os.path.abspath(os.path.join(output_dir, "theta",
+                                                                  f"theta_{topic_name}.csv")), 2)
+            fout.write(line)
 
 
 @check_output_directory(output_dir="output_dir")
