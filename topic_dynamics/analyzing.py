@@ -208,7 +208,7 @@ def get_topics_metrics(slices_file: str, theta_file: str) -> Tuple[np.array, np.
     with open(theta_file) as fin:
         reader = csv.reader(fin)
         next(reader, None)  # Skip the headers
-        for row in reader:
+        for row in tqdm(reader):
             assignment.append([])
             assignment_normalized.append([])
             scattering.append([])
@@ -286,7 +286,7 @@ def save_topics_change(assignment: np.array, assignment_normalized: np.array,
     :param output_dir: the path to the output directory.
     :return None.
     """
-    for topic_number in range(assignment.shape[0]):
+    for topic_number in tqdm(range(assignment.shape[0])):
         fig, axs = plt.subplots(4, figsize=([5, 10]))
         axs[0].set_title("Topic {topic_number}\n{tokens}"
                          .format(topic_number=topic_number + 1,
@@ -328,6 +328,7 @@ def save_dynamics(slices_file: str, theta_file: str, name2tokens: Dict[str, List
     """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+    print("Saving the metrics and their dynamics collectively.")
     assignment, assignment_normalized, scattering, focus = get_topics_metrics(slices_file,
                                                                               theta_file)
     save_metric(array=assignment, name="assignment", x_label="Slice",
@@ -338,6 +339,7 @@ def save_dynamics(slices_file: str, theta_file: str, name2tokens: Dict[str, List
                 output_dir=output_dir)
     save_metric(array=focus, name="focus", x_label="Slice", y_label="Focus (%)",
                 output_dir=output_dir)
+    print("Saving the change of the metrics dynamics.")
     save_metric_change(metric=assignment, output_dir=output_dir,
                        output_file="assignment_change.txt")
     save_metric_change(metric=assignment_normalized, output_dir=output_dir,
@@ -345,6 +347,7 @@ def save_dynamics(slices_file: str, theta_file: str, name2tokens: Dict[str, List
     save_metric_change(metric=scattering, output_dir=output_dir,
                        output_file="scattering_change.txt")
     save_metric_change(metric=focus, output_dir=output_dir, output_file="focus_change.txt")
+    print("Saving the metrics for individual topics.")
     save_topics_change(assignment=assignment, assignment_normalized=assignment_normalized,
                        scattering=scattering, focus=focus, name2tokens=name2tokens,
                        output_dir=output_dir)
