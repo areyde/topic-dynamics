@@ -140,18 +140,14 @@ class TokenParser:
         def ret(name):
             r = name.lower()
             if len(name) >= self.min_split_length:
-                ret.last_subtoken = r
                 yield r
                 if ret.prev_p and not self._single_shot:
                     yield ret.prev_p + r
                     ret.prev_p = ""
             elif not self._single_shot:
                 ret.prev_p = r
-                yield ret.last_subtoken + r
-                ret.last_subtoken = ""
 
         ret.prev_p = ""
-        ret.last_subtoken = ""
 
         if self._save_token_style:
             regexp_splitter = self.NAME_BREAKUP_KEEP_DELIMITERS_RE
