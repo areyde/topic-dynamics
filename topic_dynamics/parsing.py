@@ -10,7 +10,6 @@ from tempfile import TemporaryDirectory
 from typing import Any, Dict, List, NamedTuple, Tuple
 
 from joblib import cpu_count, delayed, Parallel
-import numpy as np
 from pygments.lexers.haskell import HaskellLexer
 from pygments.lexers.jvm import KotlinLexer, ScalaLexer
 from pygments.lexers.objective import SwiftLexer
@@ -222,45 +221,17 @@ def transform_files_list(lang2files: Dict[str, str], directory: str) -> List[Tup
     return files
 
 
-def create_chunks(lst: List[Any]) -> List[List[Any]]:
-    """
-    Transform a list into approximately equal lists for multiprocessing.
-    :param lst: a list.
-    :return: a list of approximately equal lists.
-    """
-    n_files = len(lst)
-    if n_files < PROCESSES:
-        return [lst, [] * (PROCESSES - 1)]
-    else:
-        return np.array_split(lst, PROCESSES)
-
-
-def get_tokens(file: str, lang: str) -> List[Tuple[str, int]]:
+def get_tokens(file: str, lang: str) -> Tuple[str, List[Tuple[str, int]]]:
     """
     Gather a sorted list of identifiers in the file and their count.
     :param file: the path to the file.
     :param lang: the language of file.
-    :return: a list of tuples, identifier and count.
+    :return: name of file, and a list of tuples, identifier and count.
     """
     if SUPPORTED_LANGUAGES[lang] == "tree-sitter":
-        return TreeSitterParser.get_tokens(file, lang)
+        return file, TreeSitterParser.get_tokens(file, lang)
     else:
-        return PygmentsParser.get_tokens(file, lang)
-
-
-def get_tokens_from_list(files_list: List[Tuple[str, str]]) -> Dict[str, List[Tuple[str, int]]]:
-    """
-    Gather a sorted list of identifiers in the file and their count for all the files in the list.
-    :param files_list: the list of the paths to files and their languages.
-    :return: a dictionary from files to a list of tokens and counts.
-    """
-    file2tokens = {}
-    for file in files_list:
-        try:
-            file2tokens[file[0]] = get_tokens(file[0], file[1])
-        except (UnicodeDecodeError, FileNotFoundError):
-            continue
-    return file2tokens
+        return file, PygmentsParser.get_tokens(file, lang)
 
 
 def transform_tokens(tokens: List[Tuple[str, int]]) -> List[str]:
@@ -323,25 +294,24 @@ def slice_and_parse(repositories_file: str, output_dir: str,
                                                                      commit=commit))
                         lang2files = recognize_languages(td)
                         files = transform_files_list(lang2files, td)
-                        chunk_results = pool([delayed(get_tokens_from_list)(chunk)
-                                              for chunk in create_chunks(files)])
+                        chunk_results = pool([delayed(get_tokens)(file[0], file[1])
+                                              for file in files])
                         for chunk_result in chunk_results:
-                            for file in chunk_result.keys():
-                                if (len(chunk_result[file]) != 0) and ("\n" not in file) \
-                                        and (";" not in file):
-                                    count += 1
-                                    formatted_tokens = transform_tokens(chunk_result[file])
-                                    fout1.write("{file_index};{file_path};{tokens}\n"
-                                                .format(file_index=str(count),
-                                                        file_path=repository[0] + os.path.relpath(
-                                                            os.path.abspath(os.path.join(
-                                                                td, file)), td),
-                                                        tokens=",".join(formatted_tokens)))
-                                else:
-                                    fout4.write("{file_path}\n"
-                                                .format(file_path=repository[0] + os.path.relpath(
-                                                            os.path.abspath(os.path.join(
-                                                                td, file)), td)))
+                            if (len(chunk_result[1]) != 0) and ("\n" not in chunk_result[0]) \
+                                    and (";" not in chunk_result[0]):
+                                count += 1
+                                formatted_tokens = transform_tokens(chunk_result[1])
+                                fout1.write("{file_index};{file_path};{tokens}\n"
+                                            .format(file_index=str(count),
+                                                    file_path=repository[0] + os.path.relpath(
+                                                        os.path.abspath(os.path.join(
+                                                            td, chunk_result[0])), td),
+                                                    tokens=",".join(formatted_tokens)))
+                            else:
+                                fout4.write("{file_path}\n"
+                                            .format(file_path=repository[0] + os.path.relpath(
+                                                        os.path.abspath(os.path.join(
+                                                            td, chunk_result[0])), td)))
             end_index = count
             if end_index >= start_index:  # Skips empty slices
                 fout2.write("{date};{start_index};{end_index}\n"
