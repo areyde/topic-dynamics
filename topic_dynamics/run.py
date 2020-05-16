@@ -30,6 +30,9 @@ def main(args: argparse.Namespace) -> None:
                    "A list of input projects: {input}\n"
                    "An output folder: {output}\n"
                    "Parsing mode: {mode}\n"
+                   "Single-shot: {single_shot}\n"
+                   "Minimal token length: {min_token_length}\n"
+                   "Minimal stemming length: {min_stem_length}\n"
                    "\n"
                    "--Modeling parameters--\n"
                    "Number of topics: {topics}\n"
@@ -45,8 +48,10 @@ def main(args: argparse.Namespace) -> None:
                    .format(datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                            start_date=args.start_date, slices=args.slices, days=args.days,
                            input=args.input, output=args.output, mode=args.mode,
-                           topics=args.topics, sparse_theta=args.sparse_theta,
-                           sparse_phi=args.sparse_phi, decorrelator_phi=args.decorrelator_phi,
+                           single_shot=args.single_shot, min_token_length=args.min_token_length,
+                           min_stem_length=args.min_stem_length, topics=args.topics,
+                           sparse_theta=args.sparse_theta, sparse_phi=args.sparse_phi,
+                           decorrelator_phi=args.decorrelator_phi,
                            document_passes=args.document_passes,
                            collection_passes=args.collection_passes,
                            topical_files=args.topical_files, batch_size=args.batch_size))
@@ -57,6 +62,9 @@ def main(args: argparse.Namespace) -> None:
     if args.mode == "diffs":
         slice_and_parse_diffs(repository=args.input, output_dir=args.output,
                               n_dates=int(args.slices), day_delta=int(args.days),
+                              single_shot=args.single_shot,
+                              min_token_length=int(args.min_token_length),
+                              min_stem_length=int(args.min_stem_length),
                               start_date=args.start_date)
         model_topics(output_dir=args.output, n_topics=int(args.topics),
                      sparse_theta=float(args.sparse_theta), sparse_phi=float(args.sparse_phi),
@@ -66,6 +74,9 @@ def main(args: argparse.Namespace) -> None:
     elif args.mode == "files":
         slice_and_parse_full_files(repository=args.input, output_dir=args.output,
                                    n_dates=int(args.slices), day_delta=int(args.days),
+                                   single_shot=args.single_shot,
+                                   min_token_length=int(args.min_token_length),
+                                   min_stem_length=int(args.min_stem_length),
                                    start_date=args.start_date)
         model_topics(output_dir=args.output,  n_topics=int(args.topics),
                      sparse_theta=float(args.sparse_theta), sparse_phi=float(args.sparse_phi),
@@ -81,6 +92,13 @@ if __name__ == "__main__":
                              " 'diffs' for only diffs of files (default).")
     parser.add_argument("-i", "--input", required=True, help="Full path to the input repository.")
     parser.add_argument("-o", "--output", required=True, help="Full path to the output directory.")
+    parser.add_argument("-ss", "--single_shot", default=True,
+                        help="True for single-shot subtokenizing (not concatenating short "
+                             "subtokens), False for concatenating short subtokens.")
+    parser.add_argument("-min_t", "--min_token_length", default=2,
+                        help="Any shorter subtoken will be either skipped or concatenated.")
+    parser.add_argument("-min_s", "--min_stem_length", default=256,
+                        help="Longer subtokens will be stemmed.")
     parser.add_argument("-s", "--slices", default=24,
                         help="Number of temporal slices. Default number is 24.")
     parser.add_argument("-d", "--days", default=60,

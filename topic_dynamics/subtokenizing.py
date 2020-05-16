@@ -39,8 +39,7 @@ class TokenParser:
     # NAME_BREAKUP_KEEP_DELIMITERS_RE.split(token) -> ['Var', '_', 'WithStrangeNAMING', '__',
     #                                                  'very', '_', 'strange']
     # NAME_BREAKUP_RE.split(token) -> ['Var', 'WithStrangeNAMING', 'very', 'strange']
-    STEM_THRESHOLD = 6  # We do not stem split parts shorter than or equal to this size.
-    # TODO: consider hyperparameters
+    STEM_THRESHOLD = 256  # We do not stem split parts shorter than or equal to this size.
     MAX_TOKEN_LENGTH = 256  # We cut identifiers longer than this value.
     MIN_SPLIT_LENGTH = 2  # We do not split source code identifiers shorter than this value.
     DEFAULT_SINGLE_SHOT = True  # True if we do not want to join small identifiers to next one.
@@ -109,7 +108,7 @@ class TokenParser:
 
     def process_token(self, token):
         for word in self.split(token):
-            yield word  # self.stem(word) TODO: consider stemming
+            yield self.stem(word)
 
     def stem(self, word):
         if len(word) <= self.stem_threshold:
@@ -202,15 +201,3 @@ class TokenParser:
     def __setstate__(self, state):
         self.__dict__ = state
         self._stemmer = Stemmer.Stemmer("english")
-
-
-class NoopTokenParser:
-    """
-    One can use this class one does not want to do any parsing.
-    """
-
-    def process_token(self, token):
-        yield token
-
-    def __call__(self, token):
-        return self.process_token(token)

@@ -21,7 +21,8 @@ def create_batches(directory: str, name: str) -> Tuple[artm.BatchVectorizer, art
         data_path=directory, data_format="bow_uci", collection_name=name,
         target_folder=os.path.abspath(os.path.join(directory, "batches")))
     dictionary = batch_vectorizer.dictionary
-    dictionary.save(os.path.abspath(os.path.join(directory, "dictionary")))
+    if not os.path.exists(os.path.abspath(os.path.join(directory, "dictionary.dict"))):
+        dictionary.save(os.path.abspath(os.path.join(directory, "dictionary")))
     return batch_vectorizer, dictionary
 
 
@@ -100,7 +101,7 @@ def model_topics(output_dir: str, n_topics: int, sparse_theta: float, sparse_phi
         name = "dataset"
         tokens_file = os.path.abspath(os.path.join(output_dir, "tokens.txt"))
         slices_file = os.path.abspath(os.path.join(output_dir, "slices.txt"))
-    if batch_size is 0:
+    if batch_size == 0:
         batch_size = n_topics
     batch_vectorizer, dictionary = create_batches(output_dir, name)
     model = define_model(n_topics, dictionary, sparse_theta, sparse_phi, decorrelator_phi)
