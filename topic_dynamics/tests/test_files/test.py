@@ -1,25 +1,23 @@
-BOARD_SIZE = 8
+import os
 
-def under_attack(col, queens):
-    left = right = col
+from tree_sitter import Language, Parser
 
-    for r, c in reversed(queens):
-        left, right = left - 1, right + 1
+PARSERS = {}
 
-        if c in (left, col, right):
-            return True
-    return False
 
-def solve(n):
-    if n == 0:
-        return [[]]
+def get_tree_sitter_dir() -> str:
+    """
+    Get tree-sitter directory.
+    :return: absolute path.
+    """
+    return os.path.abspath(os.path.dirname(__file__))
 
-    smaller_solutions = solve(n - 1)
 
-    return [solution+[(n,i+1)]
-        for i in range(BOARD_SIZE)
-            for solution in smaller_solutions
-                if not under_attack(i+1, solution)]
-   
-for answer in solve(BOARD_SIZE):
-    print (answer)
+def get_tree_sitter_so() -> str:
+    """
+    Get build tree-sitter `.so` location.
+    :return: absolute path.
+    """
+    tree_sitter_dir = get_tree_sitter_dir()
+    bin_loc = os.path.join(tree_sitter_dir, "build/langs.so")
+    return bin_loc

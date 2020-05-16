@@ -1,13 +1,14 @@
-#include <iostream>
-using namespace std;
+int main(int argc, char* argv[])
+{
+  float mini = bs::Zero<float>();
+  float maxi = bs::Valmax<float>();
+  if(argc >= 2) mini = std::atof(argv[1]);
+  if(argc >= 3) maxi = std::atof(argv[2]);
+  bs::exhaustive_test<bs::pack<float>> ( mini
+                              , maxi
+                              , bs::acosd
+                              , raw_acosd()
+                              );
 
-int main(){
-   int arr[] = {11, 22, 33, 44, 55};
-   int n=0;
-  
-   while(n<=4){
-      cout<<arr[n]<<endl;
-      n++;
-   }
-   return 0;
+  return 0;
 }

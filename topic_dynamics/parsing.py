@@ -230,10 +230,13 @@ def get_tokens(file: str, lang: str,
     :param subtokenizer: TokenParser() with necessary parameters.
     :return: name of file, and a list of tuples, identifier and count.
     """
-    if SUPPORTED_LANGUAGES[lang] == "tree-sitter":
-        return file, TreeSitterParser.get_tokens(file, lang, subtokenizer)
-    else:
-        return file, PygmentsParser.get_tokens(file, lang, subtokenizer)
+    try:
+        if SUPPORTED_LANGUAGES[lang] == "tree-sitter":
+            return file, TreeSitterParser.get_tokens(file, lang, subtokenizer)
+        else:
+            return file, PygmentsParser.get_tokens(file, lang, subtokenizer)
+    except (UnicodeDecodeError, FileNotFoundError):
+        return file, []
 
 
 def transform_tokens(tokens: List[Tuple[str, int]]) -> List[str]:
