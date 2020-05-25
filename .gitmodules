@@ -1,0 +1,3 @@
+[submodule "topic_dynamics/identifiers-extractor"]
+	path = topic_dynamics/identifiers-extractor
+	url = https://github.com/JetBrains-Research/identifiers-extractor
