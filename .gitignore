@@ -1,4 +1,0 @@
-topic_dynamics/parsers/build/*
-!topic_dynamics/parsers/build/.gitkeep
-topic_dynamics/language_recognition/build/*
-!topic_dynamics/language_recognition/build/.gitkeep
