@@ -1,7 +1,7 @@
 # This workflow will install Python dependencies and run tests with a single version of Python
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: Linux & MacOS CI
+name: Linux CI
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
         git submodule update --init --recursive --depth 1
     - name: Test tokenizer with Unittest
       run: |
+        cd topic_dynamics/tokenizer
         python -m identifiers_extractor.parsers
         python -m identifiers_extractor.language_recognition
-        cd topic_dynamics/tokenizer
         python -m unittest discover identifiers_extractor.tests -t .
