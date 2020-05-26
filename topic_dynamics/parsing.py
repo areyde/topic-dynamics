@@ -3,176 +3,22 @@ Parsing-related functionality.
 """
 from collections import Counter
 import datetime
-import json
 from operator import itemgetter
 import os
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, List, NamedTuple, Tuple
+from typing import Any, List, NamedTuple, Tuple
 
 from joblib import cpu_count, delayed, Parallel
-from pygments.lexers.haskell import HaskellLexer
-from pygments.lexers.jvm import KotlinLexer, ScalaLexer
-from pygments.lexers.objective import SwiftLexer
-import pygments
 from tqdm import tqdm
-import tree_sitter
 
-from .language_recognition.utils import get_enry
-from .parsers.utils import get_parser
-from .slicing import checkout_by_date, cmdline, get_dates, get_date_of_first_commit
-from .subtokenizing import TokenParser
+from .slicing import checkout_by_date, get_dates, get_date_of_first_commit
+from .tokenizer.identifiers_extractor.parsing \
+    import get_tokens, recognize_languages, transform_files_list
 
 PROCESSES = cpu_count()
 
 SliceLine = NamedTuple("SliceLine", [("date", str), ("start_index", int), ("end_index", int)])
 TokenLine = NamedTuple("TokenLine", [("index", int), ("path", str), ("tokens", str)])
-
-SUPPORTED_LANGUAGES = {"JavaScript": "tree-sitter",
-                       "Python": "tree-sitter",
-                       "Java": "tree-sitter",
-                       "Go": "tree-sitter",
-                       "C++": "tree-sitter",
-                       "Ruby": "tree-sitter",
-                       "TypeScript": "tree-sitter",
-                       "TSX": "tree-sitter",
-                       "PHP": "tree-sitter",
-                       "C#": "tree-sitter",
-                       "C": "tree-sitter",
-                       "Scala": "pygments",
-                       "Shell": "tree-sitter",
-                       "Rust": "tree-sitter",
-                       "Swift": "pygments",
-                       "Kotlin": "pygments",
-                       "Haskell": "pygments"}
-
-
-class TreeSitterParser:
-    PARSERS = {"JavaScript": "javascript",
-               "Python": "python",
-               "Java": "java",
-               "Go": "go",
-               "C++": "cpp",
-               "Ruby": "ruby",
-               "TypeScript": "typescript",
-               "TSX": "tsx",
-               "PHP": "php",
-               "C#": "c_sharp",
-               "C": "c",
-               "Shell": "bash",
-               "Rust": "rust"}
-
-    NODE_TYPES = {"JavaScript": {"identifier", "property_identifier",
-                                 "shorthand_property_identifier"},
-                  "Python": {"identifier"},
-                  "Java": {"identifier", "type_identifier"},
-                  "Go": {"identifier", "field_identifier", "type_identifier"},
-                  "C++": {"identifier", "namespace_identifier", "field_identifier",
-                          "type_identifier"},
-                  "Ruby": {"identifier", "constant", "symbol"},
-                  "TypeScript": {"identifier", "property_identifier",
-                                 "shorthand_property_identifier", "type_identifier"},
-                  "TSX": {"identifier", "property_identifier",
-                          "shorthand_property_identifier", "type_identifier"},
-                  "PHP": {"name"},
-                  "C#": {"identifier"},
-                  "C": {"identifier", "field_identifier", "type_identifier"},
-                  "Shell": {"variable_name", "command_name"},
-                  "Rust": {"identifier", "field_identifier", "type_identifier"}}
-
-    @staticmethod
-    def read_file_bytes(file: str) -> bytes:
-        """
-        Read the contents of the file.
-        :param file: the path to the file.
-        :return: bytes with the contents of the file.
-        """
-        with open(file) as fin:
-            return bytes(fin.read(), "utf-8")
-
-    @staticmethod
-    def get_positional_bytes(node: tree_sitter.Node) -> Tuple[int, int]:
-        """
-        Extract start and end byte of the tree-sitter Node.
-        :param node: node on the AST.
-        :return: (start byte, end byte).
-        """
-        start = node.start_byte
-        end = node.end_byte
-        return start, end
-
-    @staticmethod
-    def get_tokens(file: str, lang: str, subtokenizer: TokenParser) -> List[Tuple[str, int]]:
-        """
-        Gather a sorted list of identifiers in the file and their count.
-        :param file: the path to the file.
-        :param lang: the language of file.
-        :param subtokenizer: TokenParser() with necessary parameters.
-        :return: a list of tuples, identifier and count.
-        """
-        content = TreeSitterParser.read_file_bytes(file)
-        tree = get_parser(TreeSitterParser.PARSERS[lang]).parse(content)
-        root = tree.root_node
-        tokens = []
-
-        def traverse_tree(node: tree_sitter.Node) -> None:
-            """
-            Run down the AST (DFS) from a given node and gather tokens from its children.
-            :param node: starting node.
-            :return: None.
-            """
-            for child in node.children:
-                if child.type in TreeSitterParser.NODE_TYPES[lang]:
-                    start, end = TreeSitterParser.get_positional_bytes(child)
-                    token = content[start:end].decode("utf-8")
-                    if "\n" not in token:  # Will break output files.
-                        subtokens = list(subtokenizer.process_token(token))
-                        tokens.extend(subtokens)
-                if len(child.children) != 0:
-                    traverse_tree(child)
-
-        try:
-            traverse_tree(root)
-        except RecursionError:
-            return []
-        return sorted(Counter(tokens).items(), key=itemgetter(1), reverse=True)
-
-
-class PygmentsParser:
-    LEXERS = {"Scala": ScalaLexer(),
-              "Swift": SwiftLexer(),
-              "Kotlin": KotlinLexer(),
-              "Haskell": HaskellLexer()}
-
-    TYPES = {"Scala": {pygments.token.Name, pygments.token.Keyword.Type},
-             "Swift": {pygments.token.Name},
-             "Kotlin": {pygments.token.Name},
-             "Haskell": {pygments.token.Name, pygments.token.Keyword.Type}}
-
-    @staticmethod
-    def read_file(file: str) -> str:
-        """
-        Read the contents of the file.
-        :param file: the path to the file.
-        :return: the contents of the file.
-        """
-        with open(file) as fin:
-            return fin.read()
-
-    @staticmethod
-    def get_tokens(file: str, lang: str, subtokenizer: TokenParser) -> List[Tuple[str, int]]:
-        """
-        Gather a sorted list of identifiers in the file and their count.
-        :param file: the path to the file.
-        :param lang: the language of file.
-        :param subtokenizer: TokenParser() with necessary parameters.
-        :return: a list of tuples, identifier and count.
-        """
-        content = PygmentsParser.read_file(file)
-        tokens = []
-        for pair in pygments.lex(content, PygmentsParser.LEXERS[lang]):
-            if any(pair[0] in sublist for sublist in PygmentsParser.TYPES[lang]):
-                tokens.extend(list(subtokenizer.process_token(pair[1])))
-        return sorted(Counter(tokens).items(), key=itemgetter(1), reverse=True)
 
 
 def parse_slice_line(slice_line: str) -> SliceLine:
@@ -195,48 +41,14 @@ def parse_token_line(token_line: str) -> TokenLine:
     return TokenLine(int(line_list[0]), line_list[1], line_list[2])
 
 
-def recognize_languages(directory: str) -> dict:
-    """
-    Recognize the languages in the directory using Enry and return a dictionary
-    {langauge1: [files], language2: [files], ...}.
-    :param directory: the path to the directory.
-    :return: dictionary {langauge1: [files], language2: [files], ...}
-    """
-    return json.loads(cmdline("{enry_loc} -json -mode files {directory}"
-                              .format(enry_loc=get_enry(), directory=directory)))
-
-
-def transform_files_list(lang2files: Dict[str, str], directory: str) -> List[Tuple[str, str]]:
-    """
-    Transform the output of Enry on a directory into a list of tuples (full_path_to_file, lang).
-    :param lang2files: the dictionary output of Enry: {language: [files], ...}.
-    :param directory: the full path to the directory that was processed with Enry.
-    :return: a list of tuples (full_path_to_file, lang) for the supported languages.
-    """
-    files = []
-    for lang in lang2files.keys():
-        if lang in SUPPORTED_LANGUAGES.keys():
-            for file in lang2files[lang]:
-                files.append((os.path.abspath(os.path.join(directory, file)), lang))
-    return files
-
-
-def get_tokens(file: str, lang: str,
-               subtokenizer: TokenParser) -> Tuple[str, List[Tuple[str, int]]]:
+def get_tokens_as_list(file: str, lang: str) -> Tuple[str, List[Tuple[str, int]]]:
     """
     Gather a sorted list of identifiers in the file and their count.
     :param file: the path to the file.
     :param lang: the language of file.
-    :param subtokenizer: TokenParser() with necessary parameters.
     :return: name of file, and a list of tuples, identifier and count.
     """
-    try:
-        if SUPPORTED_LANGUAGES[lang] == "tree-sitter":
-            return file, TreeSitterParser.get_tokens(file, lang, subtokenizer)
-        else:
-            return file, PygmentsParser.get_tokens(file, lang, subtokenizer)
-    except (UnicodeDecodeError, FileNotFoundError):
-        return file, []
+    return file, sorted(get_tokens(file, lang).items(), key=itemgetter(1), reverse=True)
 
 
 def transform_tokens(tokens: List[Tuple[str, int]]) -> List[str]:
@@ -253,8 +65,8 @@ def transform_tokens(tokens: List[Tuple[str, int]]) -> List[str]:
     return formatted_tokens
 
 
-def slice_and_parse(repositories_file: str, output_dir: str, dates: List[datetime.datetime],
-                    single_shot: bool, min_token_length: int, min_stem_length: int) -> None:
+def slice_and_parse(repositories_file: str, output_dir: str,
+                    dates: List[datetime.datetime]) -> None:
     """
     Split the repository, parse the full files, write the data into a file.
     Can be called for parsing full files and for parsing diffs only.
@@ -262,10 +74,6 @@ def slice_and_parse(repositories_file: str, output_dir: str, dates: List[datetim
     :param repositories_file: path to text file with a list of repositories to parse.
     :param output_dir: path to the output directory.
     :param dates: a list of dates used for slicing.
-    :param single_shot: True for single-shot subtokenizing (not concatenating short subtokens),
-                        False for concatenating short subtokens.
-    :param min_token_length: any shorter subtoken will be either skipped or concatenated.
-    :param min_stem_length: longer subtokens will be stemmed.
     :return: None.
     """
     print("Collecting the data about the repositories.")
@@ -285,8 +93,6 @@ def slice_and_parse(repositories_file: str, output_dir: str, dates: List[datetim
     count = 0
     # Create temporal slices of the project, get a list of files for each slice,
     # parse all files, save the tokens
-    subtokenizer = TokenParser(single_shot=single_shot, min_split_length=min_token_length,
-                               stem_threshold=min_stem_length)
     with Parallel(PROCESSES) as pool, \
             open(os.path.abspath(os.path.join(output_dir, "tokens.txt")), "w+") as fout1, \
             open(os.path.abspath(os.path.join(output_dir, "slices.txt")), "w+") as fout2, \
@@ -305,7 +111,7 @@ def slice_and_parse(repositories_file: str, output_dir: str, dates: List[datetim
                                                                      commit=commit))
                         lang2files = recognize_languages(td)
                         files = transform_files_list(lang2files, td)
-                        chunk_results = pool([delayed(get_tokens)(file[0], file[1], subtokenizer)
+                        chunk_results = pool([delayed(get_tokens_as_list)(file[0], file[1])
                                               for file in files])
                         for chunk_result in chunk_results:
                             if (len(chunk_result[1]) != 0) and ("\n" not in chunk_result[0]) \
@@ -524,9 +330,8 @@ def uci_format(tokens_file: str, output_dir: str, name: str) -> None:
                                                                   count=str(entry[1])))
 
 
-def slice_and_parse_full_files(repository: str, output_dir: str, n_dates: int, day_delta: int,
-                               single_shot: bool, min_token_length: int, min_stem_length: int,
-                               start_date: str = None) -> None:
+def slice_and_parse_full_files(repository: str, output_dir: str, n_dates: int,
+                               day_delta: int, start_date: str = None) -> None:
     """
     Split the repository, parse the full files, write the data into a file,
     transform into the UCI format.
@@ -534,24 +339,19 @@ def slice_and_parse_full_files(repository: str, output_dir: str, n_dates: int, d
     :param output_dir: path to the output directory.
     :param n_dates: number of dates.
     :param day_delta: the number of days between dates.
-    :param single_shot: True for single-shot subtokenizing (not concatenating short subtokens),
-                        False for concatenating short subtokens.
-    :param min_token_length: any shorter subtoken will be either skipped or concatenated.
-    :param min_stem_length: longer subtokens will be stemmed.
     :param start_date: the starting (latest) date of the slicing, in the format YYYY-MM-DD,
     the default value is the moment of calling.
     :return: None.
     """
     dates = get_dates(n_dates, day_delta, start_date)
     tokens_file = os.path.abspath(os.path.join(output_dir, "tokens.txt"))
-    slice_and_parse(repository, output_dir, dates, single_shot, min_token_length, min_stem_length)
+    slice_and_parse(repository, output_dir, dates)
     uci_format(tokens_file, output_dir, "dataset")
     print("Finished data preprocessing.")
 
 
-def slice_and_parse_diffs(repository: str, output_dir: str, n_dates: int, day_delta: int,
-                          single_shot: bool, min_token_length: int, min_stem_length: int,
-                          start_date: str = None) -> None:
+def slice_and_parse_diffs(repository: str, output_dir: str, n_dates: int,
+                          day_delta: int, start_date: str = None) -> None:
     """
     Split the repository, parse the full files, extract the diffs,
     write the data into a file, transform into the UCI format.
@@ -559,10 +359,6 @@ def slice_and_parse_diffs(repository: str, output_dir: str, n_dates: int, day_de
     :param output_dir: path to the output directory.
     :param n_dates: number of dates.
     :param day_delta: the number of days between dates.
-    :param single_shot: True for single-shot subtokenizing (not concatenating short subtokens),
-                        False for concatenating short subtokens.
-    :param min_token_length: any shorter subtoken will be either skipped or concatenated.
-    :param min_stem_length: longer subtokens will be stemmed.
     :param start_date: the starting (latest) date of the slicing, in the format YYYY-MM-DD,
     the default value is the moment of calling.
     :return: None.
@@ -573,7 +369,7 @@ def slice_and_parse_diffs(repository: str, output_dir: str, n_dates: int, day_de
     slices_tokens_dir = os.path.abspath(os.path.join(output_dir, "slices_tokens"))
     tokens_file_diffs = os.path.abspath(os.path.join(output_dir, "diffs_tokens.txt"))
 
-    slice_and_parse(repository, output_dir, dates, single_shot, min_token_length, min_stem_length)
+    slice_and_parse(repository, output_dir, dates)
     split_token_file(slices_file, tokens_file, slices_tokens_dir)
     calculate_diffs(slices_tokens_dir, output_dir, dates)
     uci_format(tokens_file_diffs, output_dir, "diffs_dataset")
