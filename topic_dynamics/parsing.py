@@ -11,7 +11,7 @@ from typing import Any, List, NamedTuple, Tuple
 from joblib import cpu_count, delayed, Parallel
 from tqdm import tqdm
 
-from .slicing import checkout_by_date, get_dates, get_date_of_first_commit
+from .slicing import checkout_by_date, cmdline, get_dates, get_date_of_first_commit
 from .tokenizer.identifiers_extractor.parsing \
     import get_tokens, recognize_languages, transform_files_list
 
@@ -51,6 +51,20 @@ def get_tokens_as_list(file: str, lang: str) -> Tuple[str, List[Tuple[str, int]]
     return file, sorted(get_tokens(file, lang).items(), key=itemgetter(1), reverse=True)
 
 
+def get_dependencies_as_list(repo: str) -> Tuple[str, List[Tuple[str, int]]]:
+    """
+    Gather a sorted list of dependencies in the repository.
+    :param repo: the path to the repository.
+    :return: name of file, and a list of tuples, dependency and count (always equal to 1,
+             but necessary for topic modelling.
+    """
+    dependencies_raw = cmdline(f"pipreqs --print {repo}").rstrip().split("\n")
+    if dependencies_raw != ['']:
+        dependencies = [(dependency.split("==")[0], 1) for dependency in dependencies_raw]
+        return repo, dependencies
+    else:
+        return repo, []
+
 def transform_tokens(tokens: List[Tuple[str, int]]) -> List[str]:
     """
     Transform the original list of tokens into the writable form.
@@ -65,12 +79,13 @@ def transform_tokens(tokens: List[Tuple[str, int]]) -> List[str]:
     return formatted_tokens
 
 
-def slice_and_parse(repositories_file: str, output_dir: str,
+def slice_and_parse(way: str, repositories_file: str, output_dir: str,
                     dates: List[datetime.datetime]) -> None:
     """
     Split the repository, parse the full files, write the data into a file.
     Can be called for parsing full files and for parsing diffs only.
     When run several times, overwrites the data.
+    :param way: way of modelling: either identifiers or dependencies.
     :param repositories_file: path to text file with a list of repositories to parse.
     :param output_dir: path to the output directory.
     :param dates: a list of dates used for slicing.
@@ -109,10 +124,13 @@ def slice_and_parse(repositories_file: str, output_dir: str,
                         commit = checkout_by_date(repository[0], subdirectory, date)
                         fout3.write("{repository};{commit}\n".format(repository=repository[0],
                                                                      commit=commit))
-                        lang2files = recognize_languages(td)
-                        files = transform_files_list(lang2files, td)
-                        chunk_results = pool([delayed(get_tokens_as_list)(file[0], file[1])
-                                              for file in files])
+                        if way == "identifiers":
+                            lang2files = recognize_languages(td)
+                            files = transform_files_list(lang2files, td)
+                            chunk_results = pool([delayed(get_tokens_as_list)(file[0], file[1])
+                                                  for file in files])
+                        elif way == "dependencies":
+                            chunk_results = [get_dependencies_as_list(subdirectory)]
                         for chunk_result in chunk_results:
                             if (len(chunk_result[1]) != 0) and ("\n" not in chunk_result[0]) \
                                     and (";" not in chunk_result[0]):
@@ -330,11 +348,12 @@ def uci_format(tokens_file: str, output_dir: str, name: str) -> None:
                                                                   count=str(entry[1])))
 
 
-def slice_and_parse_full_files(repository: str, output_dir: str, n_dates: int,
+def slice_and_parse_full_files(way: str, repository: str, output_dir: str, n_dates: int,
                                day_delta: int, start_date: str = None) -> None:
     """
     Split the repository, parse the full files, write the data into a file,
     transform into the UCI format.
+    :param way: way of modelling: either identifiers or dependencies.
     :param repository: path to the repository to process.
     :param output_dir: path to the output directory.
     :param n_dates: number of dates.
@@ -345,16 +364,17 @@ def slice_and_parse_full_files(repository: str, output_dir: str, n_dates: int,
     """
     dates = get_dates(n_dates, day_delta, start_date)
     tokens_file = os.path.abspath(os.path.join(output_dir, "tokens.txt"))
-    slice_and_parse(repository, output_dir, dates)
+    slice_and_parse(way, repository, output_dir, dates)
     uci_format(tokens_file, output_dir, "dataset")
     print("Finished data preprocessing.")
 
 
-def slice_and_parse_diffs(repository: str, output_dir: str, n_dates: int,
+def slice_and_parse_diffs(way: str, repository: str, output_dir: str, n_dates: int,
                           day_delta: int, start_date: str = None) -> None:
     """
     Split the repository, parse the full files, extract the diffs,
     write the data into a file, transform into the UCI format.
+    :param way: way of modelling: either identifiers or dependencies.
     :param repository: path to the repository to process.
     :param output_dir: path to the output directory.
     :param n_dates: number of dates.
@@ -369,7 +389,7 @@ def slice_and_parse_diffs(repository: str, output_dir: str, n_dates: int,
     slices_tokens_dir = os.path.abspath(os.path.join(output_dir, "slices_tokens"))
     tokens_file_diffs = os.path.abspath(os.path.join(output_dir, "diffs_tokens.txt"))
 
-    slice_and_parse(repository, output_dir, dates)
+    slice_and_parse(way, repository, output_dir, dates)
     split_token_file(slices_file, tokens_file, slices_tokens_dir)
     calculate_diffs(slices_tokens_dir, output_dir, dates)
     uci_format(tokens_file_diffs, output_dir, "diffs_dataset")

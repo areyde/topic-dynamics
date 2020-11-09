@@ -27,6 +27,7 @@ def main(args: argparse.Namespace) -> None:
                    "Difference between slices in days: {days}\n"
                    "\n"
                    "--Parsing parameters--\n"
+                   "A way of parsing: {way}\n"
                    "A list of input projects: {input}\n"
                    "An output folder: {output}\n"
                    "Parsing mode: {mode}\n"
@@ -44,7 +45,7 @@ def main(args: argparse.Namespace) -> None:
                    "The size of matrices batches: {batch_size}"
                    .format(datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                            start_date=args.start_date, slices=args.slices, days=args.days,
-                           input=args.input, output=args.output, mode=args.mode,
+                           way=args.way, input=args.input, output=args.output, mode=args.mode,
                            topics=args.topics, sparse_theta=args.sparse_theta,
                            sparse_phi=args.sparse_phi, decorrelator_phi=args.decorrelator_phi,
                            document_passes=args.document_passes,
@@ -55,7 +56,7 @@ def main(args: argparse.Namespace) -> None:
     initialize_parser()
     initialize_enry()
     if args.mode == "diffs":
-        slice_and_parse_diffs(repository=args.input, output_dir=args.output,
+        slice_and_parse_diffs(way = args.way, repository=args.input, output_dir=args.output,
                               n_dates=int(args.slices), day_delta=int(args.days),
                               start_date=args.start_date)
         model_topics(output_dir=args.output, n_topics=int(args.topics),
@@ -64,7 +65,7 @@ def main(args: argparse.Namespace) -> None:
                      n_doc_iter=int(args.document_passes), n_col_iter=int(args.collection_passes),
                      n_files=int(args.topical_files), diffs=True, batch_size=int(args.batch_size))
     elif args.mode == "files":
-        slice_and_parse_full_files(repository=args.input, output_dir=args.output,
+        slice_and_parse_full_files(way=args.way, repository=args.input, output_dir=args.output,
                                    n_dates=int(args.slices), day_delta=int(args.days),
                                    start_date=args.start_date)
         model_topics(output_dir=args.output,  n_topics=int(args.topics),
@@ -76,6 +77,10 @@ def main(args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("-w", "--way", choices=["identifiers", "dependencies"],
+                        default="identifiers",
+                        help="The way of parsing: 'identifiers' for modelling on identifiers,"
+                             " 'dependencies' for modelling on dependencies of projects.")
     parser.add_argument("-m", "--mode", choices=["diffs", "files"], default="diffs",
                         help="The mode of parsing: 'files' for tokenizing full files,"
                              " 'diffs' for only diffs of files (default).")
